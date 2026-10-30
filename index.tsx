@@ -8,35 +8,21 @@ import "./styles.css";
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import * as DataStore from "@api/DataStore";
-import { showNotification } from "@api/Notifications";
 import { definePluginSettings, migratePluginSetting } from "@api/Settings";
-import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
-import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, User } from "@vencord/discord-types";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { ChannelStore, Menu, openModal, showToast, Tooltip, useEffect, UserStore, useState } from "@webpack/common";
+import { ChannelStore, Menu, openModal, Tooltip, useEffect, UserStore, useState } from "@webpack/common";
 
-import { DatabaseUrlNotice, deleteTimezone, getTimezone, loadDatabaseTimezones, setUserDatabaseTimezone } from "./database";
 import { SetTimezoneModal } from "./TimezoneModal";
-
-const cl = classNameFactory("vc-timezone-");
 
 export let timezones: Record<string, string | null> = {};
 export const DATASTORE_KEY = "vencord-timezones";
 
 export function resolveUserTimezone(userId: string): string | null {
-    const localTimezone = timezones[userId];
-    const shouldUseDatabase =
-        settings.store.useDatabase &&
-        (settings.store.preferDatabaseOverLocal || !localTimezone);
-
-    if (shouldUseDatabase) {
-        return getTimezone(userId) ?? localTimezone;
-    }
-    return localTimezone;
+    return timezones[userId] ?? null;
 }
 
 export function getSystemTimezone(): string {
@@ -84,74 +70,11 @@ export const settings = definePluginSettings({
         default: true
     },
 
-    useDatabase: {
-        type: OptionType.BOOLEAN,
-        description: "Enable database for getting user timezones",
-        default: true
-    },
-
-    preferDatabaseOverLocal: {
-        type: OptionType.BOOLEAN,
-        description: "Prefer database over local storage for timezones",
-        default: true
-    },
-
     showLocalTimezone: {
         type: OptionType.BOOLEAN,
         description: "Show Local Timezone instead of just local",
         default: false,
     },
-
-    databaseUrl: {
-        type: OptionType.STRING,
-        description: "Database URL for timezone storage",
-        default: "https://timezone.creations.works"
-    },
-
-    databaseUrlPermission: {
-        type: OptionType.COMPONENT,
-        component: () => <DatabaseUrlNotice />
-    },
-
-    setDatabaseTimezone: {
-        description: "Set your timezone on the database",
-        type: OptionType.COMPONENT,
-        component: () => (
-            <Button onClick={() => {
-                openModal(modalProps => <SetTimezoneModal userId={UserStore.getCurrentUser().id} modalProps={modalProps} database={true} />);
-            }}>
-                Set Timezone on Database
-            </Button>
-        )
-    },
-
-    resetDatabaseTimezone: {
-        description: "Reset your timezone on the database",
-        type: OptionType.COMPONENT,
-        component: () => (
-            <Button
-                variant="dangerPrimary"
-                onClick={async () => {
-                    try {
-                        await setUserDatabaseTimezone(UserStore.getCurrentUser().id, null);
-                        await deleteTimezone();
-                    } catch (error) {
-                        console.error("Error resetting database timezone:", error);
-                        showToast({ text: "Failed to reset database timezone", variant: "critical" });
-                    }
-                }}
-            >
-                Reset Database Timezone
-            </Button>
-        )
-    },
-
-    askedTimezone: {
-        type: OptionType.BOOLEAN,
-        description: "Whether the user has been asked to set their timezone",
-        hidden: true,
-        default: false
-    }
 });
 
 function getTime(timezone: string, timestamp: string | number, props: Intl.DateTimeFormatOptions = {}) {
@@ -187,7 +110,7 @@ const TimestampComponent = ErrorBoundary.wrap(({ userId, timestamp, type }: Prop
 
     useEffect(() => {
         setTimezone(resolveUserTimezone(userId));
-    }, [userId, settings.store.useDatabase, settings.store.preferDatabaseOverLocal]);
+    }, [userId]);
 
     useEffect(() => {
         if (type !== "profile") return;
@@ -314,41 +237,13 @@ export default definePlugin({
     ],
 
     toolboxActions: {
-        "Set Database Timezone": () => {
-            openModal(modalProps => <SetTimezoneModal userId={UserStore.getCurrentUser().id} modalProps={modalProps} database={true} />);
-        },
-        "Refresh Database Timezones": async () => {
-            try {
-                const good = await loadDatabaseTimezones();
-
-                if (good) {
-                    showToast({ text: "Timezones refreshed successfully!", variant: "success" });
-                } else {
-                    showToast({ text: "Timezones Failed to refresh!", variant: "critical" });
-                }
-            }
-            catch (error) {
-                console.error("Failed to refresh timezone:", error);
-                showToast({ text: "Failed to refresh timezones.", variant: "critical" });
-            }
+        "Set Timezone": () => {
+            openModal(modalProps => <SetTimezoneModal userId={UserStore.getCurrentUser().id} modalProps={modalProps} />);
         }
     },
 
     async start() {
         timezones = await DataStore.get<Record<string, string>>(DATASTORE_KEY) || {};
-
-        if (settings.store.useDatabase) {
-            await loadDatabaseTimezones();
-
-            if (!settings.store.askedTimezone) {
-                showNotification({
-                    title: "Timezones",
-                    body: "Want to save your timezone to the database? Click here to set it.",
-                    onClick: () => openModal(modalProps => <SetTimezoneModal userId={UserStore.getCurrentUser().id} modalProps={modalProps} database={true} />)
-                });
-                settings.store.askedTimezone = true;
-            }
-        }
     },
 
     settings,

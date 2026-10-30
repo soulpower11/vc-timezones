@@ -10,21 +10,19 @@ import { Margins } from "@utils/margins";
 import { RenderModalProps } from "@vencord/discord-types";
 import { Modal, SearchableSelect, useEffect, useMemo, useState } from "@webpack/common";
 
-import { DATASTORE_KEY, getSystemTimezone, resolveUserTimezone, settings, timezones } from ".";
-import { setTimezone, setUserDatabaseTimezone } from "./database";
-
+import { DATASTORE_KEY, getSystemTimezone, resolveUserTimezone, timezones } from ".";
 export async function setUserTimezone(userId: string, timezone: string | null) {
     timezones[userId] = timezone;
     await DataStore.set(DATASTORE_KEY, timezones);
 }
 
-export function SetTimezoneModal({ userId, modalProps, database }: { userId: string, modalProps: RenderModalProps; database?: boolean; }) {
+export function SetTimezoneModal({ userId, modalProps }: { userId: string, modalProps: RenderModalProps; }) {
     const [currentValue, setCurrentValue] = useState<string | null>(null);
 
     useEffect(() => {
         const resolvedTimezone = resolveUserTimezone(userId);
         setCurrentValue(resolvedTimezone ?? getSystemTimezone());
-    }, [userId, settings.store.useDatabase, settings.store.preferDatabaseOverLocal]);
+    }, [userId]);
 
     const options = useMemo(() => {
         return Intl.supportedValuesOf("timeZone").map(timezone => {
@@ -42,31 +40,21 @@ export function SetTimezoneModal({ userId, modalProps, database }: { userId: str
             variant: "primary",
             disabled: currentValue === null,
             onClick: async () => {
-                if (database) {
-                    const success = await setTimezone(currentValue!);
-                    if (success) {
-                        await setUserDatabaseTimezone(userId, currentValue);
-                    }
-                } else {
-                    await setUserTimezone(userId, currentValue);
-                }
-
+                await setUserTimezone(userId, currentValue);
                 modalProps.onClose();
             }
         }
     ];
 
-    if (!database) {
-        actions.unshift({
-            text: "Delete Timezone",
-            variant: "dangerPrimary",
-            disabled: false,
-            onClick: async () => {
-                await setUserTimezone(userId, null);
-                modalProps.onClose();
-            }
-        });
-    }
+    actions.unshift({
+        text: "Delete Timezone",
+        variant: "dangerPrimary",
+        disabled: false,
+        onClick: async () => {
+            await setUserTimezone(userId, null);
+            modalProps.onClose();
+        }
+    });
 
     return (
         <Modal
